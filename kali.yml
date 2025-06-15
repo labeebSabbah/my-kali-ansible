@@ -1,0 +1,156 @@
+---
+- name: Installing Tools on Kali
+  hosts: localhost
+  become: yes
+
+  vars:
+    apt_tools:
+      - gobuster
+      - seclists
+      - bloodhound
+      - bloodyad
+      - netexec
+      - libkrb5-dev
+      - krb5-user
+
+
+    pipx_tools:
+      - certipy-ad
+      - git+https://github.com/aniqfakhrul/powerview.py
+
+
+    git_tools:
+      - name: BaldHead
+        repo: https://github.com/ahmadallobani/BaldHead.git
+        dest: /opt/baldhead
+
+      - name: psexecsvc
+        repo: https://github.com/sensepost/susinternals.git
+        dest: /opt/psexecsvc
+        
+      - name: SharpCollection
+        repo: https://github.com/Flangvik/ObfuscatedSharpCollection.git
+        dest: /opt/sharpcollection
+        post_install: "mv NetFramework_4.7_Any/* . && rm -rf NetFramework_4.7_Any README.md"
+        
+      - name: gMSADumper
+        repo: https://github.com/micahvandeusen/gMSADumper.git
+        dest: /opt/gmsadumper
+        post_install: "cp gMSADumper.py /usr/bin/gMSADumper && chmod +x /usr/bin/gMSADumper"
+        
+      - name: targetedKerberoast
+        repo: https://github.com/ShutdownRepo/targetedKerberoast.git
+        dest: /opt/targetedkerberoast
+        post_install: "cp targetedKerberoast.py /usr/bin/targetedKerberoast && chmod +x /usr/bin/targetedKerberoast"
+
+
+    paths:
+      - path: /opt/pspy
+      - path: /opt/ligolo
+      - path: /opt/chisel
+      - path: /opt/peass
+
+
+    url_tools:
+      - name: Pspy
+        url: https://github.com/DominicBreuker/pspy/releases/download/v1.2.1/pspy64
+        dest: /opt/pspy/pspy64
+        dir: /opt/pspy/
+
+      - name: Ligolo Windows Agent
+        url: https://github.com/nicocha30/ligolo-ng/releases/download/v0.8.2/ligolo-ng_agent_0.8.2_windows_amd64.zip
+        dest: /opt/ligolo/agent.zip
+        dir: /opt/ligolo/
+        post_install: "unzip agent.zip && rm agent.zip"
+
+      - name: Ligolo Linux Agent
+        url: https://github.com/nicocha30/ligolo-ng/releases/download/v0.8.2/ligolo-ng_agent_0.8.2_linux_amd64.tar.gz
+        dest: /opt/ligolo/agent.tar.gz
+        dir: /opt/ligolo/
+        post_install: "tar -xvf agent.tar.gz && rm agent.tar.gz"
+
+      - name: Ligolo Proxy
+        url: https://github.com/nicocha30/ligolo-ng/releases/download/v0.8.2/ligolo-ng_proxy_0.8.2_linux_amd64.tar.gz
+        dest: /opt/ligolo/proxy.tar.gz
+        dir: /opt/ligolo/
+        post_install: "tar -xvf proxy.tar.gz && rm proxy.tar.gz"
+
+      - name: Chisel Linux
+        url: https://github.com/jpillora/chisel/releases/download/v1.10.1/chisel_1.10.1_linux_amd64.gz
+        dest: /opt/chisel/chisel.gz
+        dir: /opt/chisel/
+        post_install: "gunzip chisel.gz && chmod +x chisel"
+
+      - name: Chisel Windows
+        url: https://github.com/jpillora/chisel/releases/download/v1.10.1/chisel_1.10.1_windows_amd64.gz
+        dest: /opt/chisel/chisel.exe.gz
+        dir: /opt/chisel/
+        post_install: "gunzip chisel.exe.gz"
+        
+      - name: Linpeas
+        url: https://github.com/peass-ng/PEASS-ng/releases/download/20250601-88c7a0f6/linpeas.sh
+        dest: /opt/peass/linpeas.sh
+        dir: /opt/peass/
+
+      - name: Winpeas
+        url: https://github.com/peass-ng/PEASS-ng/releases/download/20250601-88c7a0f6/winPEAS.bat
+        dest: /opt/peass/winpeas.bat
+        dir: /opt/peass/
+
+        
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install apt tools
+      apt:
+        name: "{{ apt_tools }}"
+        state: present
+
+    - name: Install pipx tools
+      shell: "pipx install {{ item }}"
+      loop: "{{ pipx_tools }}"
+
+    - name: Ensure pipx path
+      shell: "pipx ensurepath"
+
+    - name: Ensuring paths
+      file:
+        path: "{{ item.path }}"
+        state: directory
+        mode: '0755'
+      loop: "{{ paths }}"
+
+    - name: Download tools from url
+      get_url:
+        url: "{{ item.url }}"
+        dest: "{{ item.dest }}"
+        mode: '0755'
+      loop: "{{ url_tools }}"
+
+    - name: Install git tools
+      git:
+        repo: "{{ item.repo }}"
+        dest: "{{ item.dest }}"
+        force: yes
+      loop: "{{ git_tools }}"
+
+    - name: Run git post-install commands
+      shell: "{{ item.post_install }}"
+      args:
+        chdir: "{{ item.dest }}"
+      when: item.post_install is defined and item.post_install != ""
+      loop: "{{ git_tools }}"
+
+    - name: Run url post-install commands
+      shell: "{{ item.post_install }}"
+      args:
+        chdir: "{{ item.dir }}"
+      when: item.post_install is defined and item.post_install != ""
+      loop: "{{ url_tools }}"
+
+    - name: Unzip rockyou
+      shell: "gunzip /usr/share/wordlists/rockyou.txt.gz"
