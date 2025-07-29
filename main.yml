@@ -28,7 +28,7 @@
       - python3-termcolor
       - python3-ratelimit
       - python3-pycryptodome
-
+      - pipx
 
     pipx_tools:
       - git+https://github.com/ly4k/Certipy.git
@@ -42,8 +42,6 @@
       - defaultcreds-cheat-sheet
       - git-dumper
 
-
-
     git_tools:
       - name: BaldHead
         repo: https://github.com/ahmadallobani/BaldHead.git
@@ -52,17 +50,17 @@
       - name: psexecsvc
         repo: https://github.com/sensepost/susinternals.git
         dest: /opt/psexecsvc
-        
+
       - name: SharpCollection
         repo: https://github.com/Flangvik/ObfuscatedSharpCollection.git
         dest: /opt/SharpCollection
         post_install: "mv NetFramework_4.7_Any/* . && rm -rf NetFramework_4.7_Any README.md && for f in *._obf.exe; do mv -- \"$f\" \"${f//._obf.exe/}\"; done"
-        
+
       - name: gMSADumper
         repo: https://github.com/micahvandeusen/gMSADumper.git
         dest: /opt/gMSADumper
         post_install: "mv gMSADumper.py gMSADumper && chmod +x gMSADumper && ln -s /opt/gMSADumper/gMSADumper /usr/bin/gMSADumper"
-        
+
       - name: targetedKerberoast
         repo: https://github.com/ShutdownRepo/targetedKerberoast.git
         dest: /opt/targetedKerberoast
@@ -112,13 +110,12 @@
         repo: https://github.com/ticarpi/jwt_tool.git
         dest: /opt/jwt_tool
 
-
-    paths:
+    tool_base_paths:
       - /opt/pspy
       - /opt/ligolo
       - /opt/chisel
       - /opt/peass
-
+      - /opt/BloodHound
 
     url_tools:
       - name: Pspy
@@ -130,7 +127,7 @@
         url: https://github.com/nicocha30/ligolo-ng/releases/download/v0.8.2/ligolo-ng_agent_0.8.2_windows_amd64.zip
         dest: /opt/ligolo/agent.zip
         dir: /opt/ligolo/
-        post_install: "unzip agent.zip && rm agent.zip"
+        post_install: "unzip -o agent.zip && rm agent.zip"
 
       - name: Ligolo Linux Agent
         url: https://github.com/nicocha30/ligolo-ng/releases/download/v0.8.2/ligolo-ng_agent_0.8.2_linux_amd64.tar.gz
@@ -155,11 +152,12 @@
         dest: /opt/chisel/chisel.exe.gz
         dir: /opt/chisel/
         post_install: "gunzip chisel.exe.gz"
-        
+
       - name: Linpeas
         url: https://github.com/peass-ng/PEASS-ng/releases/download/20250601-88c7a0f6/linpeas.sh
         dest: /opt/peass/linpeas.sh
         dir: /opt/peass/
+        post_install: "chmod +x linpeas.sh"
 
       - name: Winpeas
         url: https://github.com/peass-ng/PEASS-ng/releases/download/20250601-88c7a0f6/winPEAS.bat
@@ -169,85 +167,99 @@
       - name: Bloodhound
         url: https://github.com/SpecterOps/BloodHound-Legacy/releases/download/v4.3.1/BloodHound-linux-x64.zip
         dest: /opt/BloodHound.zip
-        dir: /opt
-        post_install: "unzip BloodHound.zip && mv BloodHound-linux-x64 BloodHound && rm BloodHound.zip"
-
+        dir: /opt/
+        post_install: "unzip -o BloodHound.zip && mv BloodHound-linux-x64 BloodHound && rm BloodHound.zip"
 
     go_tools:
       - name: Kerbrute
         repo: github.com/ropnop/kerbrute@master
 
-      - name: Headi 
+      - name: Headi
         repo: github.com/mlcsec/headi@latest
-
-        
 
   tasks:
     - name: Update apt cache
-      apt:
+      ansible.builtin.apt:
         update_cache: yes
         force_apt_get: yes
         cache_valid_time: 3600
 
-    - name: Remove Netexec 
-      package:
-        name:
-          - netexec
+    - name: Remove Netexec (if system package exists)
+      ansible.builtin.package:
+        name: netexec
         state: absent
 
     - name: Install apt tools
-      package:
+      ansible.builtin.package:
         name: "{{ apt_tools }}"
-      state: latest
+        state: present
 
-    - name: Ensuring paths
-      file:
+    - name: Ensuring tool base directories
+      ansible.builtin.file:
         path: "{{ item }}"
         state: directory
         mode: '0755'
-      loop: "{{ paths }}"    
+      loop: "{{ tool_base_paths }}"
 
     - name: Install pipx tools
-      shell: "pipx install {{ item }}"
+      ansible.builtin.shell: "pipx install {{ item }}"
       loop: "{{ pipx_tools }}"
+      args:
+        executable: /bin/bash
 
     - name: Ensure pipx path
-      shell: "pipx ensurepath"
+      ansible.builtin.shell: "pipx ensurepath"
+      args:
+        executable: /bin/bash
 
-    - name: Download tools from url
-      get_url:
+    - name: Download tools from URL
+      ansible.builtin.get_url:
         url: "{{ item.url }}"
         dest: "{{ item.dest }}"
         mode: '0755'
       loop: "{{ url_tools }}"
 
-    - name: Install git tools
-      git:
-        repo: "{{ item.repo }}"
-        dest: "{{ item.dest }}"
-        force: yes
-      loop: "{{ git_tools }}"
-
-    - name: Run git post-install commands
-      shell: "{{ item.post_install }}"
-      args:
-        chdir: "{{ item.dest }}"
-      when: item.post_install is defined and item.post_install != ""
-      loop: "{{ git_tools }}"
-
-    - name: Run url post-install commands
-      shell: "{{ item.post_install }}"
+    - name: Run URL post-install commands
+      ansible.builtin.shell: "{{ item.post_install }}"
       args:
         chdir: "{{ item.dir }}"
+        executable: /bin/bash
       when: item.post_install is defined and item.post_install != ""
       loop: "{{ url_tools }}"
 
-    - name: Unzip rockyou
-      shell: "gunzip /usr/share/wordlists/rockyou.txt.gz"
-    
-    - name: Install Go tools
-      shell: "go install {{ item.repo }}"
-      loop: "{{ go_tools }}"
+    - name: Install git tools
+      ansible.builtin.git:
+        repo: "{{ item.repo }}"
+        dest: "{{ item.dest }}"
+        update: yes
+      loop: "{{ git_tools }}"
 
-    - name: Ensure Go tools path
-      shell: "echo \"\nexport PATH=\"$PATH:/root/go/bin\"\" >> /root/.zshrc"
+    - name: Run git post-install commands
+      ansible.builtin.shell: "{{ item.post_install }}"
+      args:
+        chdir: "{{ item.dest }}"
+        executable: /bin/bash
+      when: item.post_install is defined and item.post_install != ""
+      loop: "{{ git_tools }}"
+
+    - name: Unzip rockyou wordlist
+      ansible.builtin.shell: "gunzip -f /usr/share/wordlists/rockyou.txt.gz"
+      args:
+        creates: /usr/share/wordlists/rockyou.txt
+
+    - name: Install Go tools
+      ansible.builtin.shell: "go install {{ item.repo }}"
+      loop: "{{ go_tools }}"
+      environment:
+        GOPATH: "/root/go"
+        GOBIN: "/root/go/bin"
+      args:
+        creates: "/root/go/bin/{{ item.name | lower }}"
+                                                          
+    - name: Ensure Go tools path in /root/.zshrc
+      ansible.builtin.lineinfile:
+        path: /root/.zshrc
+        line: 'export PATH="$PATH:/root/go/bin"'
+        create: yes
+        insertafter: EOF
+        state: present
